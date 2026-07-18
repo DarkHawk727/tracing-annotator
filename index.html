@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A private, browser-based tool for reviewing urodynamic tracings and annotating FFT-denoised Pdet points."
+    />
+    <title>Tracing Annotator</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#" aria-label="Tracing Annotator home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44" role="img">
+            <path d="M5 24h7l3-9 5 18 5-23 5 14h9" />
+          </svg>
+        </span>
+        <span>
+          <strong>Tracing Annotator</strong>
+          <small>Urodynamics review workspace</small>
+        </span>
+      </a>
+      <div class="privacy-badge">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V7a5 5 0 0 1 10 0v3M5 10h14v11H5z" /></svg>
+        <span><strong>Private by design</strong> Files stay in this browser</span>
+      </div>
+    </header>
+
+    <main>
+      <section id="uploadView" class="upload-view">
+        <div class="hero-copy">
+          <p class="eyebrow">Pdet point annotation</p>
+          <h1>Turn raw tracings into<br /><em>clear clinical annotations.</em></h1>
+          <p class="hero-description">
+            Upload one or more tracing CSVs, add the permission-to-void table, and mark clinically relevant
+            points on an FFT-denoised Pdet signal.
+          </p>
+          <div class="steps" aria-label="Three steps">
+            <div><span>01</span><p><strong>Add tracing files</strong><small>Tab- or comma-separated CSV</small></p></div>
+            <div><span>02</span><p><strong>Add permission times</strong><small>Optional CSV lookup table</small></p></div>
+            <div><span>03</span><p><strong>Review and export</strong><small>Download annotations as CSV</small></p></div>
+          </div>
+        </div>
+
+        <div class="upload-card">
+          <div class="upload-card-heading">
+            <span class="tiny-label">NEW REVIEW</span>
+            <h2>Load tracing data</h2>
+            <p>Nothing is sent to a server. Refresh the page to clear this review.</p>
+          </div>
+
+          <div id="traceDropzone" class="dropzone" tabindex="0" role="button" aria-label="Upload tracing CSV files">
+            <input id="traceFiles" type="file" accept=".csv,.tsv,.txt,text/csv" multiple hidden />
+            <span class="upload-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v5h14v-5" /></svg>
+            </span>
+            <strong>Drop tracing CSVs here</strong>
+            <span>or <u>choose files</u> from your computer</span>
+            <small>Each filename should contain the patient's MRN</small>
+          </div>
+          <div id="traceQueue" class="file-queue" aria-live="polite"></div>
+
+          <div class="divider"><span>THEN, IF AVAILABLE</span></div>
+
+          <button id="permissionButton" class="permission-picker" type="button">
+            <input id="permissionFile" type="file" accept=".csv,.tsv,.txt,text/csv" hidden />
+            <span class="file-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6zM14 2v5h5M9 12h6M9 16h6" /></svg>
+            </span>
+            <span><strong>Permission-to-void CSV</strong><small id="permissionFileLabel">Choose one lookup table · Optional</small></span>
+            <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+          </button>
+
+          <div id="uploadError" class="message error-message" role="alert" hidden></div>
+          <button id="startButton" class="primary-button" type="button" disabled>
+            Start reviewing <span aria-hidden="true">→</span>
+          </button>
+          <p class="upload-footnote">Works with the supplied tracing and permission-to-void example formats.</p>
+        </div>
+      </section>
+
+      <section id="workspaceView" class="workspace" hidden>
+        <aside class="sidebar">
+          <div class="sidebar-heading">
+            <p class="eyebrow">Current review</p>
+            <h2>Tracings</h2>
+          </div>
+          <label class="field-label" for="patientSelect">Patient / MRN</label>
+          <select id="patientSelect"></select>
+
+          <div class="summary-grid">
+            <div><span id="traceCount">0</span><small>Tracings</small></div>
+            <div><span id="permissionCount">0</span><small>Permissions</small></div>
+            <div><span id="annotationCount">0</span><small>Points</small></div>
+            <div><span id="unsureCount">0</span><small>Unsure</small></div>
+          </div>
+
+          <div class="patient-meta">
+            <div class="meta-row"><span>File</span><strong id="currentFilename">—</strong></div>
+            <div class="meta-row"><span>Samples</span><strong id="sampleCount">—</strong></div>
+            <div class="meta-row"><span>Duration</span><strong id="durationLabel">—</strong></div>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="section-title-row">
+              <h3>Permission to void</h3>
+              <span id="permissionStatus" class="status-pill">Not found</span>
+            </div>
+            <p class="hint">Matched by MRN from the uploaded lookup table. You can correct it here.</p>
+            <div class="inline-input">
+              <input id="permissionTimeInput" type="text" inputmode="decimal" placeholder="e.g. 10:18.4" aria-label="Permission-to-void time" />
+              <button id="setPermissionButton" type="button">Set</button>
+            </div>
+          </div>
+
+          <div class="sidebar-section">
+            <h3>Signal filter</h3>
+            <p class="hint">FFT low-pass settings used by the original notebook.</p>
+            <div class="two-fields">
+              <label><span>Cutoff (Hz)</span><input id="cutoffInput" type="number" min="0" step="0.001" value="0.01" /></label>
+              <label><span>Transition (Hz)</span><input id="transitionInput" type="number" min="0" step="0.01" value="0.1" /></label>
+            </div>
+            <button id="applyFilterButton" class="secondary-button" type="button">Apply filter</button>
+          </div>
+
+          <div class="sidebar-section y-axis-section">
+            <h3>Y-axis range</h3>
+            <p class="hint">Set the visible Pdet range in cmH₂O.</p>
+            <div class="two-fields">
+              <label><span>Minimum</span><input id="yMinInput" type="number" step="10" value="0" /></label>
+              <label><span>Maximum</span><input id="yMaxInput" type="number" step="10" value="200" /></label>
+            </div>
+            <button id="applyYAxisButton" class="secondary-button" type="button">Apply range</button>
+          </div>
+
+          <label class="toggle-row">
+            <span><strong>Show raw Pdet</strong><small>Overlay the original signal</small></span>
+            <input id="rawToggle" type="checkbox" checked />
+            <i aria-hidden="true"></i>
+          </label>
+
+          <div class="sidebar-actions">
+            <button id="addMoreButton" class="text-button" type="button">＋ Add or replace files</button>
+            <button id="clearReviewButton" class="text-button danger" type="button">Clear review</button>
+          </div>
+        </aside>
+
+        <div class="review-panel">
+          <div class="review-header">
+            <div>
+              <p class="eyebrow">Patient <span id="patientPosition">1 of 1</span></p>
+              <h1>MRN <span id="currentMrn">—</span></h1>
+            </div>
+            <div class="header-actions">
+              <button id="nextUnsureButton" class="icon-button unsure-nav" type="button" hidden>Next unsure <span aria-hidden="true">→</span></button>
+              <button id="unsureButton" class="icon-button unsure-button" type="button" aria-pressed="false">⚑ <span>Mark unsure</span></button>
+              <button id="undoButton" class="icon-button" type="button" title="Undo latest point">↶ <span>Undo</span></button>
+              <button id="downloadButton" class="primary-button compact" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 20h14" /></svg>
+                Export review
+              </button>
+            </div>
+          </div>
+
+          <div id="workspaceMessage" class="message" aria-live="polite" hidden></div>
+
+          <section class="chart-card">
+            <div class="chart-toolbar">
+              <div class="legend" aria-label="Chart legend">
+                <span><i class="line raw"></i>Raw Pdet</span>
+                <span><i class="line denoised"></i>FFT-denoised Pdet</span>
+                <span><i class="line permission"></i>Permission to void</span>
+                <span><i class="point"></i>Annotation</span>
+              </div>
+              <div class="chart-instructions"><span>Click</span> annotate · <span>Drag</span> pan · <span>Scroll</span> zoom</div>
+            </div>
+            <div id="chartWrap" class="chart-wrap">
+              <canvas id="traceChart" aria-label="Interactive Pdet tracing chart"></canvas>
+              <div id="chartTooltip" class="chart-tooltip" hidden></div>
+              <div id="processingOverlay" class="processing-overlay" hidden>
+                <span class="spinner"></span>Filtering signal…
+              </div>
+            </div>
+            <div class="chart-footer">
+              <span>Pdet (cmH₂O)</span>
+              <strong>Time (seconds)</strong>
+              <button id="resetZoomButton" type="button">Reset zoom</button>
+            </div>
+          </section>
+
+          <section class="annotation-entry">
+            <div>
+              <p class="eyebrow">Add a point manually</p>
+              <h2>Annotation details</h2>
+            </div>
+            <label><span>Time (seconds)</span><input id="annotationTimeInput" type="number" min="0" step="0.1" placeholder="Click chart or enter time" /></label>
+            <label class="note-field"><span>Note <small>optional</small></span><input id="annotationNoteInput" type="text" maxlength="160" placeholder="Add clinical context" /></label>
+            <button id="addPointButton" class="primary-button compact" type="button">Add point</button>
+          </section>
+
+          <section class="annotations-card">
+            <div class="annotations-heading">
+              <div><p class="eyebrow">Saved in this review</p><h2>Annotated points</h2></div>
+              <button id="clearPatientButton" class="text-button danger" type="button">Clear patient points</button>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>#</th><th>Time</th><th>Pdet</th><th>Cutoff</th><th>Transition</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody id="annotationTableBody"></tbody>
+              </table>
+              <div id="emptyAnnotations" class="empty-state">
+                <span>＋</span><strong>No points annotated yet</strong><small>Click the tracing or enter a time above to add one.</small>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer>Tracing Annotator · Client-side review tool · No files leave your device</footer>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
