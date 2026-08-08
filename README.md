@@ -27,7 +27,7 @@ python3 -m http.server 8000
 3. Start the review. Click the chart to add a point, or enter a time manually. As in the notebook, each point snaps to the highest denoised Pdet within ±5 seconds.
 4. Select **Export review** to download `tracing_review_export.zip`. It contains `pdet_annotated_points.csv`, sure tracing files in `sure_tracings/`, and unsure/flagged tracing files in `flagged_tracings/`.
 
-The chart supports click-to-annotate, drag-to-pan, scroll-to-zoom, patient navigation, an unsure review queue, manual permission correction, raw-signal visibility, adjustable Y-axis limits, configurable FFT cutoff/transition values, undo, deletion, and clearing a patient's points.
+The chart supports click-to-annotate, drag-to-pan, scroll-to-zoom, patient navigation, an unsure review queue, manual permission correction, raw-signal visibility, adjustable Y-axis limits, configurable FFT cutoff/transition values, undo, deletion, and clearing a patient's points. When present in the tracing file, Pves, Pabd, Flow, and Volume are shown as stacked, time-aligned charts below Pdet.
 
 ## Publish as a website
 

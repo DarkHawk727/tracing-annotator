@@ -121,7 +121,7 @@ function tracingHeaderIndex(rows) {
   for (let index = 0; index < searchLimit; index += 1) {
     const headers = rows[index].map(normalized);
     const hasTime = headers.some((header) => header === "time" || header === "time s" || header === "seconds");
-    const hasPressure = headers.some((header) => ["pdet", "p ves", "pves", "p abd", "pabd"].includes(header));
+    const hasPressure = headers.some((header) => /^(?:pdet|p ves|pves|p abd|pabd)(?: |$)/.test(header));
     if (hasTime && hasPressure) return index;
   }
   return -1;
@@ -129,7 +129,7 @@ function tracingHeaderIndex(rows) {
 
 function columnIndex(headers, aliases) {
   const normalizedHeaders = headers.map(normalized);
-  return normalizedHeaders.findIndex((header) => aliases.includes(header));
+  return normalizedHeaders.findIndex((header) => aliases.some((alias) => header === alias || header.startsWith(`${alias} `)));
 }
 
 export function mrnFromFilename(filename) {
@@ -157,6 +157,8 @@ export function parseTracingText(text, filename = "tracing.csv") {
   const pdetIndex = columnIndex(headers, ["pdet", "p det"]);
   const pvesIndex = columnIndex(headers, ["pves", "p ves"]);
   const pabdIndex = columnIndex(headers, ["pabd", "p abd"]);
+  const flowIndex = columnIndex(headers, ["flow", "flow rate", "urine flow", "uroflow"]);
+  const volumeIndex = columnIndex(headers, ["volume", "vol", "voided volume", "infused volume"]);
   if (pdetIndex < 0 && (pvesIndex < 0 || pabdIndex < 0)) {
     throw new Error("Pdet is missing and could not be calculated because Pves/Pabd are unavailable.");
   }
@@ -167,8 +169,10 @@ export function parseTracingText(text, filename = "tracing.csv") {
     const directPdet = pdetIndex >= 0 ? numericValue(row[pdetIndex]) : Number.NaN;
     const pves = pvesIndex >= 0 ? numericValue(row[pvesIndex]) : Number.NaN;
     const pabd = pabdIndex >= 0 ? numericValue(row[pabdIndex]) : Number.NaN;
+    const flow = flowIndex >= 0 ? numericValue(row[flowIndex]) : Number.NaN;
+    const volume = volumeIndex >= 0 ? numericValue(row[volumeIndex]) : Number.NaN;
     const pdet = pdetIndex >= 0 ? directPdet : pves - pabd;
-    if (Number.isFinite(time)) samples.push({ time, pdet });
+    if (Number.isFinite(time)) samples.push({ time, pdet, pves, pabd, flow, volume });
   }
   samples.sort((a, b) => a.time - b.time);
   const unique = samples.filter((sample, index) => index === 0 || sample.time !== samples[index - 1].time);
@@ -202,6 +206,10 @@ export function parseTracingText(text, filename = "tracing.csv") {
     filename,
     time: Float64Array.from(unique, (sample) => sample.time),
     pdet: Float64Array.from(unique, (sample) => sample.pdet),
+    pves: pvesIndex >= 0 ? Float64Array.from(unique, (sample) => sample.pves) : null,
+    pabd: pabdIndex >= 0 ? Float64Array.from(unique, (sample) => sample.pabd) : null,
+    flow: flowIndex >= 0 ? Float64Array.from(unique, (sample) => sample.flow) : null,
+    volume: volumeIndex >= 0 ? Float64Array.from(unique, (sample) => sample.volume) : null,
     pdetSource: pdetIndex >= 0 ? "Pdet" : "Pves − Pabd",
   };
 }

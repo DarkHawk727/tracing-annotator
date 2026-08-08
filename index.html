@@ -184,6 +184,24 @@
                 <span class="spinner"></span>Filtering signal…
               </div>
             </div>
+            <div id="auxiliaryCharts" class="auxiliary-charts" aria-label="Additional tracing channels">
+              <div class="auxiliary-chart" data-channel="pves" hidden>
+                <div class="auxiliary-chart-label"><strong>Pves</strong><span>cmH₂O</span></div>
+                <canvas id="pvesChart" aria-label="Pves tracing chart"></canvas>
+              </div>
+              <div class="auxiliary-chart" data-channel="pabd" hidden>
+                <div class="auxiliary-chart-label"><strong>Pabd</strong><span>cmH₂O</span></div>
+                <canvas id="pabdChart" aria-label="Pabd tracing chart"></canvas>
+              </div>
+              <div class="auxiliary-chart" data-channel="flow" hidden>
+                <div class="auxiliary-chart-label"><strong>Flow</strong><span>mL/s</span></div>
+                <canvas id="flowChart" aria-label="Flow tracing chart"></canvas>
+              </div>
+              <div class="auxiliary-chart" data-channel="volume" hidden>
+                <div class="auxiliary-chart-label"><strong>Volume</strong><span>mL</span></div>
+                <canvas id="volumeChart" aria-label="Volume tracing chart"></canvas>
+              </div>
+            </div>
             <div class="chart-footer">
               <span>Pdet (cmH₂O)</span>
               <strong>Time (seconds)</strong>

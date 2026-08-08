@@ -30,10 +30,28 @@ test("loads the supplied tab-separated tracing", () => {
 });
 
 test("derives Pdet from Pves and Pabd in comma-separated input", () => {
-  const tracing = parseTracingText("Time,Pves,Pabd\n0,12,8\n1,14,9\n2,15,10\n3,18,11\n", "MRN-001234.csv");
+  const tracing = parseTracingText("Time,Pves,Pabd,Flow,Volume\n0,12,8,1,0\n1,14,9,2.5,3\n2,15,10,-1,4\n3,18,11,0,8\n", "MRN-001234.csv");
   assert.equal(tracing.mrn, "1234");
   assert.deepEqual([...tracing.pdet], [4, 5, 5, 7]);
+  assert.deepEqual([...tracing.pves], [12, 14, 15, 18]);
+  assert.deepEqual([...tracing.pabd], [8, 9, 10, 11]);
+  assert.deepEqual([...tracing.flow], [1, 2.5, -1, 0]);
+  assert.deepEqual([...tracing.volume], [0, 3, 4, 8]);
   assert.equal(tracing.pdetSource, "Pves − Pabd");
+});
+
+test("omits optional channel arrays when their columns are unavailable", () => {
+  const tracing = parseTracingText("Time,Pdet\n0,1\n1,2\n2,3\n3,4\n", "123.csv");
+  assert.equal(tracing.pves, null);
+  assert.equal(tracing.pabd, null);
+  assert.equal(tracing.flow, null);
+  assert.equal(tracing.volume, null);
+});
+
+test("recognizes channel headers that include units", () => {
+  const tracing = parseTracingText("Time (s),Pdet (cmH2O),Pves (cmH2O),Pabd (cmH2O),Flow (mL/s),Volume (mL)\n0,1,10,9,2,0\n1,2,11,9,3,2\n2,3,13,10,4,5\n3,4,15,11,2,7\n", "123.csv");
+  assert.deepEqual([...tracing.flow], [2, 3, 4, 2]);
+  assert.deepEqual([...tracing.volume], [0, 2, 5, 7]);
 });
 
 test("interpolates blank Pdet values like the notebook", () => {

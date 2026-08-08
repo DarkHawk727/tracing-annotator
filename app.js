@@ -18,6 +18,12 @@ const byId = (id) => document.getElementById(id);
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 const fileSize = (bytes) => bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+const AUXILIARY_CHANNELS = [
+  { key: "pves", color: "#246b9f" },
+  { key: "pabd", color: "#9a6b25" },
+  { key: "flow", color: "#7a4e9d" },
+  { key: "volume", color: "#17815c" },
+];
 
 class TracingAnnotatorApp {
   constructor() {
@@ -120,6 +126,10 @@ class TracingAnnotatorApp {
   configureChart() {
     this.canvas = byId("traceChart");
     this.context = this.canvas.getContext("2d");
+    this.auxiliaryCanvases = new Map(AUXILIARY_CHANNELS.map(({ key }) => {
+      const canvas = byId(`${key}Chart`);
+      return [key, { canvas, context: canvas.getContext("2d") }];
+    }));
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
     this.resizeObserver.observe(byId("chartWrap"));
     this.canvas.addEventListener("pointerdown", (event) => this.onPointerDown(event));
@@ -243,11 +253,19 @@ class TracingAnnotatorApp {
   async selectPatient(mrn) {
     if (!this.traces.has(String(mrn))) return;
     this.currentMrn = String(mrn);
+    this.updateAuxiliaryChartVisibility();
     byId("patientSelect").value = this.currentMrn;
     this.resetView();
     this.updatePatientDetails();
     this.renderAnnotations();
     await this.computeCurrentSignal();
+  }
+
+  updateAuxiliaryChartVisibility() {
+    const trace = this.traces.get(this.currentMrn);
+    for (const { key } of AUXILIARY_CHANNELS) {
+      document.querySelector(`.auxiliary-chart[data-channel="${key}"]`).hidden = !trace?.[key];
+    }
   }
 
   async computeCurrentSignal() {
@@ -516,7 +534,7 @@ class TracingAnnotatorApp {
 
   chartGeometry() {
     const bounds = this.canvas.getBoundingClientRect();
-    return { width: bounds.width, height: bounds.height, left: 56, right: 18, top: 18, bottom: 34 };
+    return { width: bounds.width, height: bounds.height, left: 80, right: 18, top: 18, bottom: 34 };
   }
 
   xToPixel(time, geometry) {
@@ -620,6 +638,128 @@ class TracingAnnotatorApp {
       context.fillText(String(index + 1), x, y + 0.5);
     });
     context.restore();
+    this.drawAuxiliaryCharts();
+  }
+
+  drawAuxiliaryCharts() {
+    const trace = this.traces.get(this.currentMrn);
+    if (!trace) return;
+    for (const channel of AUXILIARY_CHANNELS) {
+      if (!trace[channel.key]) continue;
+      const target = this.auxiliaryCanvases.get(channel.key);
+      this.drawAuxiliaryChart(target.canvas, target.context, trace[channel.key], channel.color, channel.key);
+    }
+  }
+
+  drawAuxiliaryChart(canvas, context, values, color, channelKey) {
+    const bounds = canvas.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const pixelWidth = Math.max(1, Math.round(bounds.width * ratio));
+    const pixelHeight = Math.max(1, Math.round(bounds.height * ratio));
+    if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const geometry = { width: bounds.width, height: bounds.height, left: 80, right: 18, top: 12, bottom: 27 };
+    const time = this.traces.get(this.currentMrn).time;
+    const startIndex = Math.max(0, nearestIndex(time, this.view.start) - 1);
+    const endIndex = Math.min(time.length - 1, nearestIndex(time, this.view.end) + 1);
+    let minimum = Infinity;
+    let maximum = -Infinity;
+    for (let index = startIndex; index <= endIndex; index += 1) {
+      if (!Number.isFinite(values[index])) continue;
+      minimum = Math.min(minimum, values[index]);
+      maximum = Math.max(maximum, values[index]);
+    }
+    context.clearRect(0, 0, geometry.width, geometry.height);
+    if (!Number.isFinite(minimum)) return;
+    if (channelKey === "pves" || channelKey === "pabd") {
+      minimum = this.yAxis.minimum;
+      maximum = this.yAxis.maximum;
+    } else {
+      const padding = Math.max((maximum - minimum) * 0.08, Math.max(Math.abs(minimum), Math.abs(maximum), 1) * 0.02);
+      minimum -= padding;
+      maximum += padding;
+    }
+    const yToPixel = (value) => geometry.top + (maximum - value) / (maximum - minimum) * (geometry.height - geometry.top - geometry.bottom);
+
+    context.save();
+    context.font = "8px Inter, sans-serif";
+    context.strokeStyle = "#edf0ed";
+    context.fillStyle = "#7d8983";
+    context.lineWidth = 1;
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    for (let index = 0; index <= 2; index += 1) {
+      const value = minimum + index / 2 * (maximum - minimum);
+      const y = yToPixel(value);
+      context.beginPath();
+      context.moveTo(geometry.left, y);
+      context.lineTo(geometry.width - geometry.right, y);
+      context.stroke();
+      context.fillText(this.formatAxisValue(value, maximum - minimum), geometry.left - 7, y);
+    }
+    const plotWidth = geometry.width - geometry.left - geometry.right;
+    const tickCount = Math.max(2, Math.min(8, Math.floor(plotWidth / 110)));
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    for (let index = 0; index <= tickCount; index += 1) {
+      const tickTime = this.view.start + index / tickCount * (this.view.end - this.view.start);
+      const x = this.xToPixel(tickTime, geometry);
+      context.beginPath();
+      context.moveTo(x, geometry.top);
+      context.lineTo(x, geometry.height - geometry.bottom);
+      context.stroke();
+      context.fillText(tickTime.toFixed(this.view.end - this.view.start < 30 ? 1 : 0), x, geometry.height - geometry.bottom + 7);
+    }
+
+    context.beginPath();
+    context.rect(geometry.left, geometry.top, plotWidth, geometry.height - geometry.top - geometry.bottom);
+    context.clip();
+    const permission = this.permissionByMrn.get(this.currentMrn);
+    if (Number.isFinite(permission) && permission >= this.view.start && permission <= this.view.end) {
+      const x = this.xToPixel(permission, geometry);
+      context.save();
+      context.strokeStyle = "#17815c";
+      context.setLineDash([4, 4]);
+      context.beginPath();
+      context.moveTo(x, geometry.top);
+      context.lineTo(x, geometry.height - geometry.bottom);
+      context.stroke();
+      context.restore();
+    }
+    this.drawSeries(context, time, values, startIndex, endIndex, geometry, yToPixel, color);
+    context.restore();
+  }
+
+  formatAxisValue(value, span) {
+    return value.toFixed(span < 5 ? 2 : span < 20 ? 1 : 0);
+  }
+
+  drawSeries(context, time, values, startIndex, endIndex, geometry, yToPixel, color) {
+    const visibleCount = endIndex - startIndex + 1;
+    const plotWidth = geometry.width - geometry.left - geometry.right;
+    const stride = Math.max(1, Math.floor(visibleCount / Math.max(plotWidth * 2, 1)));
+    context.strokeStyle = color;
+    context.lineWidth = 1.25;
+    context.beginPath();
+    let started = false;
+    for (let index = startIndex; index <= endIndex; index += stride) {
+      if (!Number.isFinite(values[index])) {
+        started = false;
+        continue;
+      }
+      const x = this.xToPixel(time[index], geometry);
+      const y = yToPixel(values[index]);
+      if (started) context.lineTo(x, y);
+      else {
+        context.moveTo(x, y);
+        started = true;
+      }
+    }
+    context.stroke();
   }
 
   drawSignal(values, strokeStyle, lineWidth, geometry) {
